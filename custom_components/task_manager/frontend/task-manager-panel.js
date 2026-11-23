@@ -36,6 +36,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       editThing: "Edit Thing",
       addUser: "New Member",
       editUser: "Edit Member",
+      homeAssistantUser: "Home Assistant user",
       addLabel: "New Label",
       editLabel: "Edit Label",
       all: "All",
@@ -358,6 +359,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       editThing: "Thing bearbeiten",
       addUser: "Neues Mitglied",
       editUser: "Mitglied bearbeiten",
+      homeAssistantUser: "Home Assistant-Benutzer",
       addLabel: "Neues Label",
       editLabel: "Label bearbeiten",
       all: "Alle",
@@ -680,6 +682,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       editThing: "Modifier l'objet",
       addUser: "Nouveau membre",
       editUser: "Modifier le membre",
+      homeAssistantUser: "Utilisateur Home Assistant",
       addLabel: "Nouvelle étiquette",
       editLabel: "Modifier l'étiquette",
       all: "Toutes",
@@ -1002,6 +1005,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       editThing: "Editar Thing",
       addUser: "Nuevo miembro",
       editUser: "Editar miembro",
+      homeAssistantUser: "Usuario de Home Assistant",
       addLabel: "Nueva etiqueta",
       editLabel: "Editar etiqueta",
       all: "Todas",
@@ -1324,6 +1328,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       editThing: "Modifica Thing",
       addUser: "Nuovo membro",
       editUser: "Modifica membro",
+      homeAssistantUser: "Utente Home Assistant",
       addLabel: "Nuova etichetta",
       editLabel: "Modifica etichetta",
       all: "Tutte",
@@ -1646,6 +1651,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       editThing: "Thing bewerken",
       addUser: "Nieuw lid",
       editUser: "Lid bewerken",
+      homeAssistantUser: "Home Assistant-gebruiker",
       addLabel: "Nieuw label",
       editLabel: "Label bewerken",
       all: "Alle",
@@ -1968,6 +1974,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       editThing: "Edytuj Thing",
       addUser: "Nowy członek",
       editUser: "Edytuj członka",
+      homeAssistantUser: "Użytkownik Home Assistant",
       addLabel: "Nowa etykieta",
       editLabel: "Edytuj etykietę",
       all: "Wszystkie",
@@ -3152,9 +3159,26 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       }
     }
 
-    openUserModal(user = null) {
-      this._modalState = { type: "user", user: user || this._getNewUserTemplate() };
+    async openUserModal(user = null) {
+      const modal = { type: "user", user: user || this._getNewUserTemplate() };
+      this._modalState = modal;
       this._render();
+      if (!this._hass.user?.is_admin) return;
+
+      try {
+        const accounts = await this._hass.callWS({ type: "config/auth/list" });
+        if (this._modalState !== modal) return;
+        modal.accounts = accounts.filter(account => !account.system_generated)
+          .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+        const field = this.shadowRoot.getElementById("m-user-account-field");
+        if (field) field.innerHTML = this._renderUserAccountField();
+      } catch (err) {
+        console.error("Task Manager: Could not load Home Assistant users", err);
+        if (this._modalState === modal) {
+          const field = this.shadowRoot.getElementById("m-user-account-field");
+          if (field) field.textContent = err.message || String(err);
+        }
+      }
     }
 
     openLabelModal(label = null) {
@@ -7047,6 +7071,26 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
     }
 
 
+    _renderUserAccountField() {
+      const { user, accounts } = this._modalState;
+      if (!accounts) return "";
+      const linkedId = user.ha_user_id || "";
+      return `
+        <label class="form-label" for="m-user-account">${this.t("homeAssistantUser")}</label>
+        <select class="select-input" id="m-user-account">
+          <option value="">${this.t("none")}</option>
+          ${linkedId && !accounts.some(account => account.id === linkedId) ? `
+            <option value="${this._escape(linkedId)}" selected>${this._escape(linkedId)}</option>
+          ` : ""}
+          ${accounts.map(account => `
+            <option value="${this._escape(account.id)}" ${account.id === linkedId ? "selected" : ""}>
+              ${this._escape(account.name || account.id)}
+            </option>
+          `).join("")}
+        </select>
+      `;
+    }
+
     _renderUserModal() {
       const isGamification = this._data.settings && this._data.settings.gamification_enabled !== false;
       const user = this._modalState.user;
@@ -7067,6 +7111,10 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
               <label class="form-label">${this.t("colorTheme")}</label>
               <input type="color" id="m-user-color" value="${user.color || "#3b82f6"}" style="width:60px; height:36px; border:none; border-radius:6px; cursor:pointer;">
             </div>
+
+            ${this._hass.user?.is_admin ? `
+              <div class="form-group" id="m-user-account-field">${this._renderUserAccountField()}</div>
+            ` : ""}
 
             ${isGamification ? `
               <div class="form-group">
@@ -8244,8 +8292,12 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
             points: parseInt(root.getElementById("m-user-points").value, 10) || 0
           };
 
-          await this._callWS("task_manager/save_user", { user: userPayload });
-          this.closeModal();
+          const account = root.getElementById("m-user-account");
+          if (account) userPayload.ha_user_id = account.value || null;
+
+          const modal = this._modalState;
+          const result = await this._callWS("task_manager/save_user", { user: userPayload });
+          if (result?.success && this._modalState === modal) this.closeModal();
         });
       }
 
