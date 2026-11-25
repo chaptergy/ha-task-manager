@@ -850,6 +850,10 @@ class TaskManagerCard extends HTMLElement {
         const action = btn.getAttribute("data-action");
         if (!taskId || !this._hass || this._pendingTaskActions.has(taskId) ||
             this._recentlyCompleted.has(taskId)) return;
+        const haUserId = this._hass.user?.id;
+        const member = action === "complete" && haUserId
+          ? this._users.find(user => user.ha_user_id === haUserId)
+          : null;
         this._pendingTaskActions.add(taskId);
         btn.setAttribute("aria-disabled", "true");
         try {
@@ -857,6 +861,7 @@ class TaskManagerCard extends HTMLElement {
             if (action === "complete") {
               const task = this._tasks.find(t => t.id === taskId);
               const payload = { type: "task_manager/complete_task", task_id: taskId };
+              if (member) payload.user_id = member.id;
               if (task && task.task_type === "reading") {
                 if (task.registers && task.registers.length > 0) {
                   const readings = [];
@@ -895,7 +900,7 @@ class TaskManagerCard extends HTMLElement {
           } catch (e) {
             // Service fallback
             const srv = action === "complete" ? "complete_task" : "reopen_task";
-            await this._hass.callService("task_manager", srv, { task_id: taskId });
+            await this._hass.callService("task_manager", srv, { task_id: taskId, ...(member ? { user_id: member.id } : {}) });
           }
           if (action === "complete") {
             this._recentlyCompleted.add(taskId);

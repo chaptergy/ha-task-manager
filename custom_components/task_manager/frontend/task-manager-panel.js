@@ -315,6 +315,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       notesLabel: "Notes / Work Log",
       completedAtLabel: "Completion Date & Time",
       completeWithDetails: "Complete with Details",
+      completedBy: "Completed by",
       skip: "Skip",
       skipTask: "Skip Task",
       skipConfirm: "Skip this task recurrence? Next due date will be calculated without awarding points.",
@@ -568,8 +569,8 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       lastDoneDate: "Letztes Erledigt-Datum",
       advancedOptions: "Erweitert & HA Overrides",
       parts: "Ersatzteile & Vorrat",
-      completionHistory: "Abschlüsse",
-      noCompletions: "Keine Abschlüsse erfasst.",
+      completionHistory: "Erledigungen",
+      noCompletions: "Keine Erledigungen erfasst.",
       allHistoryTasks: "Alle Aufgaben",
       addPart: "Neues Ersatzteil",
       editPart: "Ersatzteil bearbeiten",
@@ -642,6 +643,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       notesLabel: "Notizen / Arbeitsbericht",
       completedAtLabel: "Erledigungszeitpunkt",
       completeWithDetails: "Mit Details erledigen",
+      completedBy: "Erledigt von",
       skip: "Überspringen",
       skipTask: "Aufgabe überspringen",
       skipConfirm: "Diese Fälligkeit überspringen? Der nächste Termin wird berechnet, ohne Punkte zu vergeben.",
@@ -971,6 +973,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       notesLabel: "Notes / Rapport d'intervention",
       completedAtLabel: "Date & heure d'achèvement",
       completeWithDetails: "Terminer avec détails",
+      completedBy: "Terminé par",
       skip: "Passer",
       skipTask: "Passer la tâche",
       skipConfirm: "Passer cette occurrence de la tâche ? La prochaine date sera calculée sans attribuer de points.",
@@ -1295,6 +1298,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       notesLabel: "Notas / Registro de trabajo",
       completedAtLabel: "Fecha y hora de finalización",
       completeWithDetails: "Completar con detalles",
+      completedBy: "Completada por",
       skip: "Saltar",
       skipTask: "Saltar tarea",
       skipConfirm: "¿Saltar esta ocurrencia de la tarea? La próxima fecha se calculará sin otorgar puntos.",
@@ -1619,6 +1623,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       notesLabel: "Note / Registro lavoro",
       completedAtLabel: "Data e ora di completamento",
       completeWithDetails: "Completa con dettagli",
+      completedBy: "Completato da",
       skip: "Salta",
       skipTask: "Salta attività",
       skipConfirm: "Saltare questa ricorrenza dell'attività? La prossima data verrà calcolata senza assegnare punti.",
@@ -1943,6 +1948,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       notesLabel: "Notities / Werkrapport",
       completedAtLabel: "Voltooiingsdatum en -tijd",
       completeWithDetails: "Voltooien met details",
+      completedBy: "Voltooid door",
       skip: "Overslaan",
       skipTask: "Taak overslaan",
       skipConfirm: "Deze herhaling van de taak overslaan? Volgende datum wordt berekend zonder punten toekenning.",
@@ -2267,6 +2273,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       notesLabel: "Notatki / Raport z prac",
       completedAtLabel: "Data i godzina ukończenia",
       completeWithDetails: "Ukończ ze szczegółami",
+      completedBy: "Ukończone przez",
       skip: "Pomiń",
       skipTask: "Pomiń zadanie",
       skipConfirm: "Pominąć to wystąpienie zadania? Następny termin zostanie obliczony bez przyznawania punktów.",
@@ -2925,7 +2932,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       this._triggerConfetti();
       const payload = {
         task_id: taskId,
-        user_id: this._activeUser
+        user_id: details?.user_id !== undefined ? details.user_id : this._activeUser
       };
       if (details) {
         if (details.reading_value !== undefined && details.reading_value !== null && details.reading_value !== "") {
@@ -6898,6 +6905,10 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
 
     _renderCompleteDetailsModal() {
       const task = (this._modalState && this._modalState.task) || {};
+      const users = this._data.users || [];
+      const haUserId = this._hass?.user?.id;
+      const linkedMember = haUserId ? users.find(user => user.ha_user_id === haUserId) : null;
+      const completedBy = linkedMember?.id || task.current_assignee;
       const parts = this._data.parts || [];
       const isReading = task.task_type === "reading";
       const nowIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -6910,6 +6921,15 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
             <h2 style="margin:0 0 12px 0; font-size:18px;">
               ✓ ${this.t("completeWithDetails")}: ${this._escape(task.title || "")}
             </h2>
+
+            <div class="form-group">
+              <label class="form-label" for="m-comp-user">${this.t("completedBy")}</label>
+              <select class="text-input" id="m-comp-user">
+                ${users.map(user => `
+                  <option value="${this._escape(user.id)}" ${user.id === completedBy ? "selected" : ""}>${this._escape(user.name)}</option>
+                `).join("")}
+              </select>
+            </div>
 
             ${isReading ? `
               <div style="background:rgba(6, 182, 212, 0.12); border:1px solid rgba(6, 182, 212, 0.25); border-radius:8px; padding:12px; margin-bottom:14px;">
@@ -8332,6 +8352,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
           const compDate = root.getElementById("m-comp-date") ? root.getElementById("m-comp-date").value : null;
 
           await this.completeTask(task.id, {
+            user_id: root.getElementById("m-comp-user").value || null,
             reading_value: readingVal,
             readings: readings.length > 0 ? readings : null,
             consumed_parts: consumedParts,
