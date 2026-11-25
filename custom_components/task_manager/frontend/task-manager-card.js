@@ -36,6 +36,7 @@ const CARD_I18N = {
     edCompleted: "Completed",
     edMaxTasks: "Max Tasks to Display",
     edShowAdd: "Show Quick Add Input Row",
+    edShowSkip: "Show Skip button",
     edShowPriority: "Show Priority Badges",
     edShowAssignee: "Show Assigned Member",
   },
@@ -69,6 +70,7 @@ const CARD_I18N = {
     edCompleted: "Erledigt",
     edMaxTasks: "Maximale Anzahl Aufgaben",
     edShowAdd: "Schnell-Hinzufügen-Zeile anzeigen",
+    edShowSkip: "Schaltfläche „Überspringen“ anzeigen",
     edShowPriority: "Prioritäts-Badges anzeigen",
     edShowAssignee: "Zuständiges Mitglied anzeigen",
   },
@@ -102,6 +104,7 @@ const CARD_I18N = {
     edCompleted: "Terminées",
     edMaxTasks: "Nombre max de tâches à afficher",
     edShowAdd: "Afficher le champ d'ajout rapide",
+    edShowSkip: "Afficher le bouton « Ignorer »",
     edShowPriority: "Afficher les badges de priorité",
     edShowAssignee: "Afficher le membre assigné",
   },
@@ -135,6 +138,7 @@ const CARD_I18N = {
     edCompleted: "Completadas",
     edMaxTasks: "Máx tareas a mostrar",
     edShowAdd: "Mostrar fila de añadir rápido",
+    edShowSkip: "Mostrar el botón « Omitir »",
     edShowPriority: "Mostrar insignias de prioridad",
     edShowAssignee: "Mostrar miembro asignado",
   },
@@ -168,6 +172,7 @@ const CARD_I18N = {
     edCompleted: "Completate",
     edMaxTasks: "Max attività da mostrare",
     edShowAdd: "Mostra riga di inserimento rapido",
+    edShowSkip: "Mostra il pulsante « Salta »",
     edShowPriority: "Mostra badge priorità",
     edShowAssignee: "Mostra membro assegnato",
   },
@@ -201,6 +206,7 @@ const CARD_I18N = {
     edCompleted: "Voltooid",
     edMaxTasks: "Max aantal taken",
     edShowAdd: "Snelle invoerregel tonen",
+    edShowSkip: "Knop ‘Overslaan’ tonen",
     edShowPriority: "Prioriteitsbadges tonen",
     edShowAssignee: "Toegewezen lid tonen",
   },
@@ -234,6 +240,7 @@ const CARD_I18N = {
     edCompleted: "Ukończone",
     edMaxTasks: "Maks. liczba zadań do wyświetlenia",
     edShowAdd: "Pokaż pasek szybkiego dodawania",
+    edShowSkip: "Pokaż przycisk „Pomiń”",
     edShowPriority: "Pokaż oznaczenia priorytetów",
     edShowAssignee: "Pokaż przypisanego członka",
   }
@@ -295,6 +302,7 @@ class TaskManagerCard extends HTMLElement {
       title: "Task Manager",
       default_filter: "all",
       show_add: true,
+      show_skip: true,
       show_completed: true,
       show_assignee: true,
       show_priority: true,
@@ -312,6 +320,7 @@ class TaskManagerCard extends HTMLElement {
       title: "Task Manager",
       default_filter: "all",
       show_add: true,
+      show_skip: true,
       show_completed: true,
       show_assignee: true,
       show_priority: true,
@@ -761,7 +770,7 @@ class TaskManagerCard extends HTMLElement {
                     `).join("") : ""}
                   </div>
                 </div>
-                ${!isDone ? `
+                ${!isDone && this._config.show_skip !== false ? `
                   <button class="task-skip-btn" data-id="${t.id}" title="${this._t("skip")}" style="background:transparent; border:none; color:var(--secondary-text-color, #64748b); cursor:pointer; font-size:16px; padding:6px 10px; border-radius:6px; min-width:32px; min-height:32px; display:inline-flex; align-items:center; justify-content:center;" onmouseover="this.style.color='var(--primary-color, #2563eb)'" onmouseout="this.style.color='var(--secondary-text-color, #64748b)'">
                     ⏭️
                   </button>
@@ -1033,6 +1042,11 @@ class TaskManagerCardEditor extends HTMLElement {
         <label class="toggle-row">
           <input type="checkbox" data-config-value="show_add" id="ed-add" ${this._config.show_add !== false ? "checked" : ""}>
           <span>${this._t("edShowAdd")}</span>
+        </label>
+
+        <label class="toggle-row">
+          <input type="checkbox" data-config-value="show_skip" id="ed-skip" ${this._config.show_skip !== false ? "checked" : ""}>
+          <span>${this._t("edShowSkip")}</span>
         </label>
 
         <label class="toggle-row">
