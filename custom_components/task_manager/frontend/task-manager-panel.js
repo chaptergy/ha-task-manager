@@ -2335,6 +2335,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       this._availableTodoEntities = [];
       this._urlParamsHandled = false;
       this._justCompletedTaskId = null;
+      this._pendingTaskActions = new Set();
       this._expandedTaskId = null;
     }
 
@@ -2928,8 +2929,6 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
     }
 
     async completeTask(taskId, details = null) {
-      this._playSuccessSound();
-      this._triggerConfetti();
       const payload = {
         task_id: taskId,
         user_id: details?.user_id !== undefined ? details.user_id : this._activeUser
@@ -2966,6 +2965,8 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       const updatedTask = (this._data.tasks || []).find(t => t.id === taskId);
       this._justCompletedTaskId = taskId;
       this._render();
+      this._playSuccessSound();
+      this._triggerConfetti();
 
       if (!this._urlParamsHandled) {
         if (updatedTask && isRecurring && updatedTask.due_date) {
@@ -3882,32 +3883,51 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
           }
 
           .check-btn {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            border: 2px solid var(--ha-card-border-color, var(--divider-color, rgba(127, 127, 127, 0.4)));
-            background: transparent;
+            width: 26px;
+            height: 26px;
+            border-radius: 7px;
+            border: 2px solid var(--secondary-text-color, #64748b);
+            background: var(--card-background-color, #fff);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            color: transparent;
-            transition: all 0.2s ease;
-            margin-top: 2px;
+            padding: 0;
+            transition: all 0.15s ease;
           }
-
-          .check-btn:hover {
-            border-color: var(--success-color, #10b981);
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--success-color, #10b981);
+          .check-btn[aria-disabled="false"]:hover {
+            border-color: var(--primary-color, #0284c7);
           }
-
+          .check-btn:focus-visible {
+            outline: 2px solid var(--primary-color, #0284c7);
+            outline-offset: 2px;
+          }
           .check-btn.checked,
-          .completed-task .check-btn {
-            background: var(--success-color, #10b981) !important;
-            border-color: var(--success-color, #10b981) !important;
-            color: #ffffff !important;
+          .check-btn.just-completed {
+            background: var(--success-color, #10b981);
+            border-color: var(--success-color, #10b981);
+          }
+          .check-btn.checked::after,
+          .check-btn.just-completed::after {
+            content: "";
+            width: 6px;
+            height: 11px;
+            border: solid var(--text-primary-color, white);
+            border-width: 0 2px 2px 0;
+            transform: translateY(-1px) rotate(45deg);
+          }
+          .check-btn.just-completed {
+            animation: task-check-pop 280ms ease-out;
+          }
+          @keyframes task-check-pop {
+            45% { transform: scale(1.18); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .check-btn {
+              animation: none !important;
+              transition: none;
+            }
           }
 
           .task-card.just-completed {
@@ -4590,10 +4610,6 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
           :host(.tablet-mode) .task-card {
             padding: 20px;
           }
-          :host(.tablet-mode) .check-btn {
-            width: 36px;
-            height: 36px;
-          }
           :host(.tablet-mode) .task-action-btn {
             min-height: 46px;
             padding: 10px 18px;
@@ -4874,12 +4890,6 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
               max-width: 100%;
               min-width: 0;
               box-sizing: border-box;
-            }
-
-            .check-btn {
-              width: 32px;
-              height: 32px;
-              font-size: 14px;
             }
 
             .task-title {
@@ -5309,9 +5319,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       return `
         <div class="task-card priority-${task.priority} ${isCompleted ? "completed-task" : ""} ${isJustCompleted ? "just-completed" : ""} ${task.is_active === false ? "is-paused" : ""} ${isExpanded ? "is-expanded" : ""}" data-task-id="${task.id}">
           <div class="task-top">
-            <button class="check-btn ${isJustCompleted ? "checked" : ""}" data-complete-task="${task.id}" title="${isCompleted ? this.t("reset") : this.t("done")}">
-              ✓
-            </button>
+            <button type="button" class="check-btn ${isCompleted ? "checked" : ""} ${isJustCompleted ? "just-completed" : ""}" data-complete-task="${task.id}" title="${isCompleted ? this.t("reset") : this.t("done")}" aria-disabled="${isJustCompleted || this._pendingTaskActions.has(task.id)}"></button>
             <div class="task-info">
               <div class="task-title" style="display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
                 <span>${this._escape(task.title)}</span>
@@ -7483,16 +7491,32 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
 
       // Task complete toggle
       root.querySelectorAll("[data-complete-task]").forEach(btn => {
-        btn.addEventListener("click", (e) => {
+        btn.addEventListener("click", async (e) => {
           e.stopPropagation();
           const tId = btn.getAttribute("data-complete-task");
+          if (this._pendingTaskActions.has(tId) || this._justCompletedTaskId === tId) return;
+
           const task = this._data.tasks.find(t => t.id === tId);
-          if (task && task.status === "completed") {
-            this.resetTask(tId);
-          } else if (task && task.task_type === "reading") {
+          if (!task) return;
+          const isCompleted = task.status === "completed";
+          if (!isCompleted && task.task_type === "reading") {
             this.openCompleteModal(task);
-          } else {
-            this.completeTask(tId);
+            return;
+          }
+
+          this._pendingTaskActions.add(tId);
+          btn.setAttribute("aria-disabled", "true");
+          try {
+            if (isCompleted) {
+              await this.resetTask(tId);
+            } else {
+              await this.completeTask(tId);
+            }
+          } finally {
+            this._pendingTaskActions.delete(tId);
+            // The action can re-render the button before it finishes.
+            const currentButton = root.querySelector(`[data-complete-task="${CSS.escape(tId)}"]`);
+            currentButton?.setAttribute("aria-disabled", String(this._justCompletedTaskId === tId));
           }
         });
       });
