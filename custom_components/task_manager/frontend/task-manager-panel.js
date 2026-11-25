@@ -62,6 +62,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       assignee: "Assignee",
       label: "Label",
       rotation: "Rotation",
+      rotationParticipants: "Rotation participants",
       subtasks: "Subtasks",
       autoResets: "auto-resets",
       points: "Points",
@@ -385,6 +386,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       assignee: "Zuständig",
       label: "Label",
       rotation: "Rotation",
+      rotationParticipants: "Teilnehmende der Rotation",
       subtasks: "Teilaufgaben",
       autoResets: "automatisch zurückgesetzt",
       points: "Punkte",
@@ -708,6 +710,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       assignee: "Attribué à",
       label: "Étiquette",
       rotation: "Rotation",
+      rotationParticipants: "Participants à la rotation",
       subtasks: "Sous-tâches",
       autoResets: "réinit. auto",
       points: "Points",
@@ -1031,6 +1034,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       assignee: "Asignado a",
       label: "Etiqueta",
       rotation: "Rotación",
+      rotationParticipants: "Participantes en la rotación",
       subtasks: "Subtareas",
       autoResets: "reinicio auto",
       points: "Puntos",
@@ -1354,6 +1358,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       assignee: "Assegnato a",
       label: "Etichetta",
       rotation: "Rotazione",
+      rotationParticipants: "Partecipanti alla rotazione",
       subtasks: "Sotto-attività",
       autoResets: "ripristino auto",
       points: "Punti",
@@ -1677,6 +1682,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       assignee: "Toegewezen aan",
       label: "Label",
       rotation: "Rotatie",
+      rotationParticipants: "Deelnemers aan de rotatie",
       subtasks: "Deeltaken",
       autoResets: "auto-reset",
       points: "Punten",
@@ -2000,6 +2006,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       assignee: "Przypisane do",
       label: "Etykieta",
       rotation: "Rotacja",
+      rotationParticipants: "Uczestnicy rotacji",
       subtasks: "Podzadania",
       autoResets: "auto-reset",
       points: "Punkty",
@@ -4395,6 +4402,27 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
             color: var(--secondary-text-color, #475569);
           }
 
+          .form-group[hidden] {
+            display: none;
+          }
+
+          .form-checkbox-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
+          .form-checkbox-option {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+          }
+
           /* Entity Combobox / Dropdown */
           .entity-picker-wrapper {
             position: relative;
@@ -6201,7 +6229,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
             <!-- Reminders -->
             <div class="form-group">
               <label class="form-label">🔔 ${this.t("reminders")}</label>
-              <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <div class="form-checkbox-options">
                 ${[
                   { val: 0, label: this.t("atDueTime") },
                   { val: 15, label: this.t("minBefore", { min: "15" }) },
@@ -6210,7 +6238,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
                 ].map(r => {
                   const checked = (task.reminders || []).includes(r.val);
                   return `
-                    <label style="display:flex; align-items:center; gap:4px; font-size:12px; background:var(--secondary-background-color, rgba(127,127,127,0.08)); padding:4px 8px; border-radius:6px; cursor:pointer;">
+                    <label class="form-checkbox-option">
                       <input type="checkbox" class="m-reminder-checkbox" value="${r.val}" ${checked ? "checked" : ""}>
                       <span>${r.label}</span>
                     </label>
@@ -6271,6 +6299,20 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
                   <option value="least_completed" ${task.rotation_mode === "least_completed" ? "selected" : ""}>${this.t("leastCompleted")}</option>
                   <option value="random" ${task.rotation_mode === "random" ? "selected" : ""}>${this.t("random")}</option>
                 </select>
+              </div>
+            </div>
+
+            <div class="form-group" id="m-task-rotation-participants" role="group" aria-labelledby="m-task-rotation-participants-label"
+              ${!task.rotation_mode || task.rotation_mode === "none" ? "hidden" : ""}>
+              <span class="form-label" id="m-task-rotation-participants-label">${this.t("rotationParticipants")}</span>
+              <div class="form-checkbox-options">
+                ${this._data.users.map(u => `
+                  <label class="form-checkbox-option">
+                    <input type="checkbox" class="m-task-rotation-participant" value="${u.id}"
+                      ${(task.assignees || []).includes(u.id) || u.id === task.current_assignee ? "checked" : ""}>
+                    <span>${this._escape(u.name)}</span>
+                  </label>
+                `).join("")}
               </div>
             </div>
 
@@ -7658,6 +7700,13 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
         });
       }
 
+      const taskRotation = root.getElementById("m-task-rotation");
+      if (taskRotation) {
+        taskRotation.addEventListener("change", () => {
+          root.getElementById("m-task-rotation-participants").hidden = taskRotation.value === "none";
+        });
+      }
+
       // Modal Save Task
       const btnSaveTask = root.getElementById("modal-save-task");
       if (btnSaveTask) {
@@ -7672,6 +7721,17 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
           const subtasks = Array.from(subtaskInputs).map(inp => inp.value.trim()).filter(Boolean);
 
           const assignee = root.getElementById("m-task-assignee").value;
+          const rotationMode = taskRotation.value;
+          let assignees = assignee ? [assignee] : [];
+          if (rotationMode !== "none") {
+            const selected = new Set(assignees);
+            for (const checkbox of root.querySelectorAll(".m-task-rotation-participant:checked")) {
+              selected.add(checkbox.value);
+            }
+            // Preserve the order of existing participants for round robin.
+            const existing = (this._modalState.task.assignees || []).filter(id => selected.delete(id));
+            assignees = [...existing, ...selected];
+          }
           const destSelect = root.getElementById("m-task-dest");
           const destProvider = destSelect ? destSelect.value : undefined;
           const selectedReminders = Array.from(root.querySelectorAll(".m-reminder-checkbox:checked")).map(cb => parseInt(cb.value, 10));
@@ -7722,9 +7782,9 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
             due_time: root.getElementById("m-task-time").value,
             priority: root.getElementById("m-task-priority").value,
             points: parseInt(root.getElementById("m-task-points").value, 10) || 10,
-            assignees: assignee ? [assignee] : [],
-            current_assignee: assignee || null,
-            rotation_mode: root.getElementById("m-task-rotation").value,
+            assignees,
+            current_assignee: assignee || assignees[0] || null,
+            rotation_mode: rotationMode,
             destination_provider: destProvider,
             reminders: selectedReminders,
             is_active: root.getElementById("m-task-is-active") ? root.getElementById("m-task-is-active").checked : true,
