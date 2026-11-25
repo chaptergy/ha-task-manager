@@ -274,6 +274,8 @@ class TaskManagerCard extends HTMLElement {
     this._hass = null;
     this._currentFilter = "all";
     this._tasks = [];
+    this._pendingTaskActions = new Set();
+    this._recentlyCompleted = new Set();
     this._users = [];
     this._things = [];
   }
@@ -563,22 +565,48 @@ class TaskManagerCard extends HTMLElement {
           width: 26px;
           height: 26px;
           border-radius: 7px;
-          border: 1.5px solid var(--ha-card-border-color, #94a3b8);
-          background: transparent;
+          border: 2px solid var(--secondary-text-color, #64748b);
+          background: var(--card-background-color, #fff);
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 15px;
-          color: transparent;
           flex-shrink: 0;
           padding: 0;
           transition: all 0.15s ease;
         }
-        .task-check.checked {
+        .task-check[aria-disabled="false"]:hover {
+          border-color: var(--primary-color, #0284c7);
+        }
+        .task-check:focus-visible {
+          outline: 2px solid var(--primary-color, #0284c7);
+          outline-offset: 2px;
+        }
+        .task-check.checked,
+        .task-check.just-completed {
           background: var(--success-color, #10b981);
           border-color: var(--success-color, #10b981);
-          color: #ffffff;
+        }
+        .task-check.checked::after,
+        .task-check.just-completed::after {
+          content: "";
+          width: 6px;
+          height: 11px;
+          border: solid var(--text-primary-color, white);
+          border-width: 0 2px 2px 0;
+          transform: translateY(-1px) rotate(45deg);
+        }
+        .task-check.just-completed {
+          animation: task-check-pop 280ms ease-out;
+        }
+        @keyframes task-check-pop {
+          45% { transform: scale(1.18); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .task-check {
+            animation: none !important;
+            transition: none;
+          }
         }
         .task-content {
           flex: 1;
@@ -672,6 +700,7 @@ class TaskManagerCard extends HTMLElement {
             <div class="empty-state">🎉 ${this._t("noTasks")}</div>
           ` : tasks.map(t => {
             const isDone = t.status === "completed";
+            const justCompleted = this._recentlyCompleted.has(t.id);
             const isOverdue = !isDone && t.due_date && t.due_date < todayStr;
             const isToday = !isDone && t.due_date === todayStr;
 
@@ -683,9 +712,7 @@ class TaskManagerCard extends HTMLElement {
 
             return `
               <div class="task-item">
-                <button class="task-check ${isDone ? "checked" : ""}" data-id="${t.id}" data-action="${isDone ? "reset" : "complete"}" title="${isDone ? this._t("reopen") : this._t("complete")}">
-                  ✓
-                </button>
+                <button class="task-check ${isDone ? "checked" : ""} ${justCompleted ? "just-completed" : ""}" data-id="${t.id}" data-action="${isDone ? "reset" : "complete"}" title="${isDone ? this._t("reopen") : this._t("complete")}" aria-disabled="${justCompleted || this._pendingTaskActions.has(t.id)}"></button>
                 <div class="task-content">
                   <div class="task-title ${isDone ? "done" : ""}">${t.title || this._t("task")}</div>
                   <div class="task-meta">
@@ -781,7 +808,11 @@ class TaskManagerCard extends HTMLElement {
       btn.addEventListener("click", async () => {
         const taskId = btn.getAttribute("data-id");
         const action = btn.getAttribute("data-action");
-        if (taskId && this._hass) {
+        if (!taskId || !this._hass || this._pendingTaskActions.has(taskId) ||
+            this._recentlyCompleted.has(taskId)) return;
+        this._pendingTaskActions.add(taskId);
+        btn.setAttribute("aria-disabled", "true");
+        try {
           try {
             if (action === "complete") {
               const task = this._tasks.find(t => t.id === taskId);
@@ -826,7 +857,19 @@ class TaskManagerCard extends HTMLElement {
             const srv = action === "complete" ? "complete_task" : "reopen_task";
             await this._hass.callService("task_manager", srv, { task_id: taskId });
           }
+          if (action === "complete") {
+            this._recentlyCompleted.add(taskId);
+            this._render();
+            setTimeout(() => {
+              this._recentlyCompleted.delete(taskId);
+              this._render();
+            }, 900);
+          }
           await this._fetchTasks();
+        } finally {
+          this._pendingTaskActions.delete(taskId);
+          const currentButton = root.querySelector(`.task-check[data-id="${CSS.escape(taskId)}"]`);
+          currentButton?.setAttribute("aria-disabled", String(this._recentlyCompleted.has(taskId)));
         }
       });
     });
