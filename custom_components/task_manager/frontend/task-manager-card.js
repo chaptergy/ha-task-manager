@@ -11,7 +11,7 @@ const CARD_I18N = {
     taskSingular: "task",
     taskPlural: "tasks",
     filterAll: "All",
-    showAllTasks: "Show all ({overdue} overdue, {other} other hidden)",
+    showMoreTasks: "Show {count} more tasks ({overdue} overdue)",
     showFewerTasks: "Show fewer",
     filterToday: "Today",
     filterDueSoon: "Due Soon",
@@ -47,7 +47,7 @@ const CARD_I18N = {
     taskSingular: "Aufgabe",
     taskPlural: "Aufgaben",
     filterAll: "Alle",
-    showAllTasks: "Alle anzeigen ({overdue} überfällige, {other} weitere ausgeblendet)",
+    showMoreTasks: "{count} weitere Aufgaben anzeigen ({overdue} überfällig)",
     showFewerTasks: "Weniger anzeigen",
     filterToday: "Heute",
     filterDueSoon: "Bald fällig",
@@ -83,7 +83,7 @@ const CARD_I18N = {
     taskSingular: "tâche",
     taskPlural: "tâches",
     filterAll: "Toutes",
-    showAllTasks: "Tout afficher ({overdue} en retard, {other} autres masquées)",
+    showMoreTasks: "Afficher {count} tâches de plus ({overdue} en retard)",
     showFewerTasks: "Afficher moins",
     filterToday: "Aujourd'hui",
     filterDueSoon: "Bientôt",
@@ -119,7 +119,7 @@ const CARD_I18N = {
     taskSingular: "tarea",
     taskPlural: "tareas",
     filterAll: "Todas",
-    showAllTasks: "Mostrar todas ({overdue} vencidas, {other} otras ocultas)",
+    showMoreTasks: "Mostrar {count} tareas más ({overdue} vencidas)",
     showFewerTasks: "Mostrar menos",
     filterToday: "Hoy",
     filterDueSoon: "Vence pronto",
@@ -155,7 +155,7 @@ const CARD_I18N = {
     taskSingular: "attività",
     taskPlural: "attività",
     filterAll: "Tutte",
-    showAllTasks: "Mostra tutte ({overdue} in ritardo, {other} altre nascoste)",
+    showMoreTasks: "Mostra altre {count} attività ({overdue} in ritardo)",
     showFewerTasks: "Mostra meno",
     filterToday: "Oggi",
     filterDueSoon: "In scadenza",
@@ -191,7 +191,7 @@ const CARD_I18N = {
     taskSingular: "taak",
     taskPlural: "taken",
     filterAll: "Alle",
-    showAllTasks: "Alles tonen ({overdue} achterstallig, {other} overige verborgen)",
+    showMoreTasks: "Toon {count} extra taken ({overdue} achterstallig)",
     showFewerTasks: "Minder tonen",
     filterToday: "Vandaag",
     filterDueSoon: "Binnenkort",
@@ -227,7 +227,7 @@ const CARD_I18N = {
     taskSingular: "zadanie",
     taskPlural: "zadań",
     filterAll: "Wszystkie",
-    showAllTasks: "Pokaż wszystkie ({overdue} zaległych, {other} innych ukrytych)",
+    showMoreTasks: "Pokaż więcej zadań: {count} ({overdue} zaległych)",
     showFewerTasks: "Pokaż mniej",
     filterToday: "Dzisiaj",
     filterDueSoon: "Wkrótce",
@@ -294,7 +294,7 @@ class TaskManagerCard extends HTMLElement {
     this._config = {};
     this._hass = null;
     this._currentFilter = "all";
-    this._showAllTasks = false;
+    this._taskBatches = 1;
     this._tasks = [];
     this._pendingTaskActions = new Set();
     this._recentlyCompleted = new Set();
@@ -350,6 +350,7 @@ class TaskManagerCard extends HTMLElement {
         this._config.max_tasks = num;
       }
     }
+    this._taskBatches = 1;
     if (!this._currentFilter || this._currentFilter === "all") {
       this._currentFilter = this._config.default_filter || "all";
     }
@@ -459,10 +460,10 @@ class TaskManagerCard extends HTMLElement {
     const todayStr = new Date().toISOString().slice(0, 10);
     const filteredTasks = this._getFilteredTasks();
     const limit = Number(this._config.max_items ?? this._config.max_tasks);
-    const limitedTasks = limit > 0 ? filteredTasks.slice(0, limit) : filteredTasks;
-    const overflow = filteredTasks.slice(limitedTasks.length);
-    const hiddenOverdue = overflow.filter(t => t.status === "pending" && t.due_date && t.due_date < todayStr).length;
-    const tasks = this._showAllTasks ? filteredTasks : limitedTasks;
+    const batchSize = limit > 0 ? Math.max(1, Math.trunc(limit)) : 0;
+    const tasks = limit > 0 ? filteredTasks.slice(0, batchSize * this._taskBatches) : filteredTasks;
+    const nextTasks = filteredTasks.slice(tasks.length, tasks.length + batchSize);
+    const nextOverdue = nextTasks.filter(t => t.status === "pending" && t.due_date && t.due_date < todayStr).length;
     const overdueCount = this._tasks.filter(t => t.status === "pending" && t.due_date && t.due_date < todayStr).length;
     const pausedCount = this._tasks.filter(t => t.is_active === false).length;
 
@@ -794,13 +795,16 @@ class TaskManagerCard extends HTMLElement {
             `;
           }).join("")}
         </div>
-        ${overflow.length ? `
-          <button type="button" class="filter-chip task-limit-toggle" id="card-task-limit-toggle"
-            aria-controls="card-task-list" aria-expanded="${this._showAllTasks}">
-            ${this._showAllTasks ? this._t("showFewerTasks") : this._t("showAllTasks", {
-              overdue: hiddenOverdue,
-              other: overflow.length - hiddenOverdue,
-            })}
+        ${nextTasks.length ? `
+          <button type="button" class="filter-chip task-limit-toggle" id="card-show-more"
+            aria-controls="card-task-list">
+            ${this._t("showMoreTasks", { count: nextTasks.length, overdue: nextOverdue })}
+          </button>
+        ` : ""}
+        ${limit > 0 && tasks.length > batchSize ? `
+          <button type="button" class="filter-chip task-limit-toggle" id="card-show-fewer"
+            aria-controls="card-task-list">
+            ${this._t("showFewerTasks")}
           </button>
         ` : ""}
       </ha-card>
@@ -817,15 +821,21 @@ class TaskManagerCard extends HTMLElement {
     root.querySelectorAll(".filter-chip[data-filter]").forEach(btn => {
       btn.addEventListener("click", () => {
         this._currentFilter = btn.getAttribute("data-filter") || "all";
-        this._showAllTasks = false;
+        this._taskBatches = 1;
         this._render();
       });
     });
 
-    root.getElementById("card-task-limit-toggle")?.addEventListener("click", () => {
-      this._showAllTasks = !this._showAllTasks;
+    root.getElementById("card-show-more")?.addEventListener("click", () => {
+      this._taskBatches += 1;
       this._render();
-      root.getElementById("card-task-limit-toggle")?.focus();
+      (root.getElementById("card-show-more") || root.getElementById("card-show-fewer"))?.focus();
+    });
+
+    root.getElementById("card-show-fewer")?.addEventListener("click", () => {
+      this._taskBatches = 1;
+      this._render();
+      root.getElementById("card-show-more")?.focus();
     });
 
     // Skip Task
