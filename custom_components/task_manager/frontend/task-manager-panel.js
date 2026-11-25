@@ -241,6 +241,9 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       lastDoneDate: "Last Done Date",
       advancedOptions: "Advanced & Overrides",
       parts: "Spare Parts & Supplies",
+      completionHistory: "Completions",
+      noCompletions: "No completions recorded.",
+      allHistoryTasks: "All tasks",
       addPart: "New Spare Part",
       editPart: "Edit Spare Part",
       deletePart: "Delete Spare Part",
@@ -565,6 +568,9 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       lastDoneDate: "Letztes Erledigt-Datum",
       advancedOptions: "Erweitert & HA Overrides",
       parts: "Ersatzteile & Vorrat",
+      completionHistory: "Abschlüsse",
+      noCompletions: "Keine Abschlüsse erfasst.",
+      allHistoryTasks: "Alle Aufgaben",
       addPart: "Neues Ersatzteil",
       editPart: "Ersatzteil bearbeiten",
       deletePart: "Ersatzteil löschen",
@@ -2306,6 +2312,7 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
         parts: []
       };
       this._currentTab = "chores";
+      this._historyTaskId = "";
       this._filterStatus = "all";
       this._filterAssignee = "all";
       this._filterLabel = "all";
@@ -4033,7 +4040,19 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
             border-color: var(--primary-color, #2563eb);
           }
 
-          .task-actions-drawer {
+          .completion-history-entry {
+          padding: 12px;
+          border-bottom: 1px solid var(--divider-color);
+          overflow-wrap: anywhere;
+        }
+        .completion-history-entry summary {
+          cursor: pointer;
+        }
+        .completion-history-entry > div {
+          margin-top: 6px;
+          white-space: pre-wrap;
+        }
+        .task-actions-drawer {
             display: none;
             border-top: 1px solid var(--divider-color, rgba(127, 127, 127, 0.12));
             padding-top: 12px;
@@ -5072,6 +5091,9 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
           <div class="nav-tab ${this._currentTab === "calendar" ? "active" : ""}" data-tab="calendar">
             📅 ${this.t("calendar")}
           </div>
+          <div class="nav-tab ${this._currentTab === "history" ? "active" : ""}" data-tab="history">
+            🕒 ${this.t("completionHistory")}
+          </div>
           <div class="nav-tab ${this._currentTab === "things" ? "active" : ""}" data-tab="things">
             ⚙️ ${this.t("things")} <span class="badge-pill">${this._data.things.length}</span>
           </div>
@@ -5134,6 +5156,8 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
       switch (this._currentTab) {
         case "chores":
           return this._renderChoresView();
+        case "history":
+          return this._renderCompletionHistory();
         case "calendar":
           return this._renderCalendarView();
         case "things":
@@ -5147,6 +5171,58 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
         default:
           return "";
       }
+    }
+
+    _renderCompletionHistory() {
+      const tasks = [...this._data.tasks].sort((a, b) => a.title.localeCompare(b.title, this.lang));
+      const selected = tasks.find(task => task.id === this._historyTaskId);
+      const entries = (selected ? [selected] : tasks).flatMap(task =>
+        (task.history || []).map(entry => ({
+          task,
+          entry,
+          timestamp: Date.parse(entry.completed_at)
+        }))
+      );
+      entries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      const users = new Map(this._data.users.map(user => [user.id, user.name]));
+
+      return `
+        <div class="toolbar">
+          <select id="completion-history-task" class="text-input" aria-label="${this.t("allHistoryTasks")}">
+            <option value="">${this.t("allHistoryTasks")}</option>
+            ${tasks.map(task => `
+              <option value="${this._escape(task.id)}" ${task === selected ? "selected" : ""}>
+                ${this._escape(task.title)}
+              </option>
+            `).join("")}
+          </select>
+        </div>
+        ${entries.length ? entries.map(({ task, entry, timestamp }) => {
+          const date = Number.isFinite(timestamp)
+            ? new Date(timestamp).toLocaleString(this.lang, { dateStyle: "medium", timeStyle: "short" })
+            : entry.completed_at || "—";
+          const user = users.get(entry.user_id) || entry.user_id;
+          const readings = entry.readings?.length ? entry.readings :
+            entry.reading_value != null ? [{ value: entry.reading_value, unit: entry.reading_unit }] : [];
+          const details = [
+            entry.notes,
+            entry.duration_minutes != null ? `${this.t("durationMinutesLabel")} · ${entry.duration_minutes}` : null,
+            entry.cost != null ? `${this.t("costLabel")} · ${entry.cost}` : null,
+            ...readings.map(reading => [reading.name, reading.value, reading.unit].filter(value => value != null && value !== "").join(" ")),
+            ...(entry.consumed_parts || []).map(part => `${part.quantity} × ${part.name}`)
+          ].filter(Boolean);
+          const summary = `
+            <strong>${this._escape(task.title)}</strong> · ${this._escape(date)}
+            ${user ? ` · ${this._escape(user)}` : ""}
+          `;
+          return details.length ? `
+            <details class="completion-history-entry">
+              <summary>${summary}</summary>
+              ${details.map(detail => `<div>${this._escape(String(detail))}</div>`).join("")}
+            </details>
+          ` : `<div class="completion-history-entry">${summary}</div>`;
+        }).join("") : `<p>${this.t("noCompletions")}</p>`}
+      `;
     }
 
     // ================= VIEW: CHORES =================
@@ -5401,6 +5477,10 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
             <button type="button" class="task-action-btn" data-edit-task="${task.id}" title="${this.t("edit")}">
               <span class="btn-icon">✏️</span>
               <span>${this.t("edit")}</span>
+            </button>
+            <button type="button" class="task-action-btn" data-completion-history="${this._escape(task.id)}">
+              <span class="btn-icon" aria-hidden="true">🕒</span>
+              <span>${this.t("completionHistory")}</span>
             </button>
             <button type="button" class="task-action-btn btn-danger" data-delete-task="${task.id}" title="${this.t("delete")}">
               <span class="btn-icon">🗑️</span>
@@ -7242,6 +7322,22 @@ function QR8bitByte(t){this.mode=QRMode.MODE_8BIT_BYTE,this.data=t,this.parsedDa
         tab.addEventListener("click", () => {
           this._currentTab = tab.getAttribute("data-tab");
           this._render();
+        });
+      });
+
+      root.getElementById("completion-history-task")?.addEventListener("change", event => {
+        this._historyTaskId = event.target.value;
+        this._render();
+        root.getElementById("completion-history-task")?.focus();
+      });
+
+      root.querySelectorAll("[data-completion-history]").forEach(button => {
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          this._historyTaskId = button.dataset.completionHistory;
+          this._currentTab = "history";
+          this._render();
+          root.getElementById("completion-history-task")?.focus();
         });
       });
 
