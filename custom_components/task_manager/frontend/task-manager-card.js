@@ -11,6 +11,8 @@ const CARD_I18N = {
     taskSingular: "task",
     taskPlural: "tasks",
     filterAll: "All",
+    showAllTasks: "Show all ({overdue} overdue, {other} other hidden)",
+    showFewerTasks: "Show fewer",
     filterToday: "Today",
     filterDueSoon: "Due Soon",
     filterOverdue: "Overdue",
@@ -45,6 +47,8 @@ const CARD_I18N = {
     taskSingular: "Aufgabe",
     taskPlural: "Aufgaben",
     filterAll: "Alle",
+    showAllTasks: "Alle anzeigen ({overdue} überfällige, {other} weitere ausgeblendet)",
+    showFewerTasks: "Weniger anzeigen",
     filterToday: "Heute",
     filterDueSoon: "Bald fällig",
     filterOverdue: "Überfällig",
@@ -79,6 +83,8 @@ const CARD_I18N = {
     taskSingular: "tâche",
     taskPlural: "tâches",
     filterAll: "Toutes",
+    showAllTasks: "Tout afficher ({overdue} en retard, {other} autres masquées)",
+    showFewerTasks: "Afficher moins",
     filterToday: "Aujourd'hui",
     filterDueSoon: "Bientôt",
     filterOverdue: "En retard",
@@ -113,6 +119,8 @@ const CARD_I18N = {
     taskSingular: "tarea",
     taskPlural: "tareas",
     filterAll: "Todas",
+    showAllTasks: "Mostrar todas ({overdue} vencidas, {other} otras ocultas)",
+    showFewerTasks: "Mostrar menos",
     filterToday: "Hoy",
     filterDueSoon: "Vence pronto",
     filterOverdue: "Vencida",
@@ -147,6 +155,8 @@ const CARD_I18N = {
     taskSingular: "attività",
     taskPlural: "attività",
     filterAll: "Tutte",
+    showAllTasks: "Mostra tutte ({overdue} in ritardo, {other} altre nascoste)",
+    showFewerTasks: "Mostra meno",
     filterToday: "Oggi",
     filterDueSoon: "In scadenza",
     filterOverdue: "In ritardo",
@@ -181,6 +191,8 @@ const CARD_I18N = {
     taskSingular: "taak",
     taskPlural: "taken",
     filterAll: "Alle",
+    showAllTasks: "Alles tonen ({overdue} achterstallig, {other} overige verborgen)",
+    showFewerTasks: "Minder tonen",
     filterToday: "Vandaag",
     filterDueSoon: "Binnenkort",
     filterOverdue: "Achterstallig",
@@ -215,6 +227,8 @@ const CARD_I18N = {
     taskSingular: "zadanie",
     taskPlural: "zadań",
     filterAll: "Wszystkie",
+    showAllTasks: "Pokaż wszystkie ({overdue} zaległych, {other} innych ukrytych)",
+    showFewerTasks: "Pokaż mniej",
     filterToday: "Dzisiaj",
     filterDueSoon: "Wkrótce",
     filterOverdue: "Zaległe",
@@ -280,6 +294,7 @@ class TaskManagerCard extends HTMLElement {
     this._config = {};
     this._hass = null;
     this._currentFilter = "all";
+    this._showAllTasks = false;
     this._tasks = [];
     this._pendingTaskActions = new Set();
     this._recentlyCompleted = new Set();
@@ -426,14 +441,6 @@ class TaskManagerCard extends HTMLElement {
       return (pOrder[a.priority] || 5) - (pOrder[b.priority] || 5);
     });
 
-    const maxVal = this._config.max_items !== undefined ? this._config.max_items : this._config.max_tasks;
-    if (maxVal !== undefined && maxVal !== null && maxVal !== "") {
-      const limit = Number(maxVal);
-      if (!isNaN(limit) && limit > 0) {
-        list = list.slice(0, limit);
-      }
-    }
-
     return list;
   }
 
@@ -450,7 +457,12 @@ class TaskManagerCard extends HTMLElement {
 
     const lang = this._getLang();
     const todayStr = new Date().toISOString().slice(0, 10);
-    const tasks = this._getFilteredTasks();
+    const filteredTasks = this._getFilteredTasks();
+    const limit = Number(this._config.max_items ?? this._config.max_tasks);
+    const limitedTasks = limit > 0 ? filteredTasks.slice(0, limit) : filteredTasks;
+    const overflow = filteredTasks.slice(limitedTasks.length);
+    const hiddenOverdue = overflow.filter(t => t.status === "pending" && t.due_date && t.due_date < todayStr).length;
+    const tasks = this._showAllTasks ? filteredTasks : limitedTasks;
     const overdueCount = this._tasks.filter(t => t.status === "pending" && t.due_date && t.due_date < todayStr).length;
     const pausedCount = this._tasks.filter(t => t.is_active === false).length;
 
@@ -468,6 +480,9 @@ class TaskManagerCard extends HTMLElement {
           border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color, rgba(127,127,127,0.15)));
           box-sizing: border-box;
           overflow: hidden;
+        }
+        .task-limit-toggle {
+          margin-top: 12px;
         }
         .header {
           display: flex;
@@ -704,7 +719,7 @@ class TaskManagerCard extends HTMLElement {
           </div>
         ` : ""}
 
-        <div class="task-list">
+        <div class="task-list" id="card-task-list">
           ${tasks.length === 0 ? `
             <div class="empty-state">🎉 ${this._t("noTasks")}</div>
           ` : tasks.map(t => {
@@ -779,6 +794,15 @@ class TaskManagerCard extends HTMLElement {
             `;
           }).join("")}
         </div>
+        ${overflow.length ? `
+          <button type="button" class="filter-chip task-limit-toggle" id="card-task-limit-toggle"
+            aria-controls="card-task-list" aria-expanded="${this._showAllTasks}">
+            ${this._showAllTasks ? this._t("showFewerTasks") : this._t("showAllTasks", {
+              overdue: hiddenOverdue,
+              other: overflow.length - hiddenOverdue,
+            })}
+          </button>
+        ` : ""}
       </ha-card>
     `;
 
@@ -790,11 +814,18 @@ class TaskManagerCard extends HTMLElement {
     if (!root) return;
 
     // Filters
-    root.querySelectorAll(".filter-chip").forEach(btn => {
+    root.querySelectorAll(".filter-chip[data-filter]").forEach(btn => {
       btn.addEventListener("click", () => {
         this._currentFilter = btn.getAttribute("data-filter") || "all";
+        this._showAllTasks = false;
         this._render();
       });
+    });
+
+    root.getElementById("card-task-limit-toggle")?.addEventListener("click", () => {
+      this._showAllTasks = !this._showAllTasks;
+      this._render();
+      root.getElementById("card-task-limit-toggle")?.focus();
     });
 
     // Skip Task
